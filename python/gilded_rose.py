@@ -1,70 +1,89 @@
 # -*- coding: utf-8 -*-
 
-class GildedRose(object):
-
+class GildedRose:
     def __init__(self, items):
         self.items = items
+        self.strategies = {
+            "Aged Brie": AgedBrieStrategy(),
+            "Backstage passes to a TAFKAL80ETC concert": BackstagePassStrategy(),
+            "Sulfuras, Hand of Ragnaros": SulfurasStrategy(),
+        }
 
     def update_quality(self):
         for item in self.items:
-            if item.name == "Sulfuras, Hand of Ragnaros":
-                continue  # "Sulfuras" ne change jamais
+            strategy = self.strategies.get(item.name, ConjuredStrategy() if "Conjured" in item.name else DefaultStrategy())
+            strategy.update(item)
 
-            degradation = 1
-            if "Conjured" in item.name:
-                degradation = 2  # Les objets conjurés se détériorent deux fois plus vite
 
-            # Mettre à jour la qualité selon le type d'objet
-            if item.name == "Aged Brie":
-                self.update_aged_brie(item)
-            elif item.name == "Backstage passes to a TAFKAL80ETC concert":
-                self.update_backstage_passes(item)
-            else:
-                self.update_regular_item(item, degradation)
-
-            # Mise à jour de la date de vente
-            item.sell_in -= 1
-
-            # Si l'item est expiré, on met à jour la qualité encore une fois
-            if item.sell_in < 0:
-                self.handle_expired_item(item, degradation)
-
-    def update_aged_brie(self, item):
-        """Aged Brie augmente en qualité au fil du temps."""
-        self.increase_quality(item)
-        if item.sell_in < 0:
-            self.increase_quality(item)  # Double augmentation après expiration
+class ItemStrategy:
+    """ Classe de base pour toutes les stratégies de mise à jour des items. """
     
-    def update_backstage_passes(self, item):
-        """Backstage passes augmentent rapidement puis chutent à 0 après le concert."""
+    def update(self, item):
+        raise NotImplementedError("Chaque stratégie doit implémenter la méthode update()")
+
+
+class DefaultStrategy(ItemStrategy):
+    """ Stratégie par défaut pour les objets normaux. """
+
+    def update(self, item):
+        self.decrease_quality(item)
+        item.sell_in -= 1
         if item.sell_in < 0:
+            self.decrease_quality(item)
+
+    def decrease_quality(self, item, amount=1):
+        item.quality = max(0, item.quality - amount)
+
+
+class AgedBrieStrategy(ItemStrategy):
+    """ Stratégie pour le fromage Aged Brie (augmente en qualité avec le temps). """
+
+    def update(self, item):
+        self.increase_quality(item)
+        item.sell_in -= 1
+        if item.sell_in < 0:
+            self.increase_quality(item)
+
+    def increase_quality(self, item, amount=1):
+        item.quality = min(50, item.quality + amount)
+
+
+class BackstagePassStrategy(ItemStrategy):
+    """ Stratégie pour les billets de concert (augmente en qualité mais tombe à 0 après). """
+
+    def update(self, item):
+        if item.sell_in <= 0:
             item.quality = 0
         else:
             self.increase_quality(item)
-            if item.sell_in < 10:
+            if item.sell_in <= 10:
                 self.increase_quality(item)
-            if item.sell_in < 5:
+            if item.sell_in <= 5:
                 self.increase_quality(item)
+        item.sell_in -= 1
 
-    def update_regular_item(self, item, degradation):
-        """Les objets normaux se dégradent normalement."""
-        self.decrease_quality(item, degradation)
+    def increase_quality(self, item, amount=1):
+        item.quality = min(50, item.quality + amount)
 
-    def handle_expired_item(self, item, degradation):
-        """Gérer les items après leur expiration."""
-        if item.name == "Aged Brie":
-            self.increase_quality(item)  # Double augmentation après expiration
-        elif item.name != "Backstage passes to a TAFKAL80ETC concert":
-            self.decrease_quality(item, degradation)  # Double dégradation
 
-    def increase_quality(self, item):
-        """Augmente la qualité d'un item sans dépasser 50."""
-        if item.quality < 50:
-            item.quality += 1
+class ConjuredStrategy(ItemStrategy):
+    """ Stratégie pour les objets Conjured (se dégradent 2 fois plus vite). """
 
-    def decrease_quality(self, item, factor=1):
-        """Diminue la qualité d'un item sans descendre en dessous de 0."""
-        item.quality = max(0, item.quality - factor)
+    def update(self, item):
+        self.decrease_quality(item, 2)
+        item.sell_in -= 1
+        if item.sell_in < 0:
+            self.decrease_quality(item, 2)
+
+    def decrease_quality(self, item, amount=1):
+        item.quality = max(0, item.quality - amount)
+
+
+class SulfurasStrategy(ItemStrategy):
+    """ Stratégie pour Sulfuras (ne change jamais). """
+
+    def update(self, item):
+        pass  # Sulfuras ne perd jamais en qualité ni en sell_in
 
 class Item:
     def __init__(self, name, sell_in, quality):
